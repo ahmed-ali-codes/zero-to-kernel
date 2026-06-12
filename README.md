@@ -180,6 +180,10 @@ qemu-system-i386 -cdrom iso/minios.iso -d int,cpu_reset -no-reboot
 (gdb) break kernel_main        # set breakpoint
 ```
 
+### QEMU Display Tips (macOS)
+- **Stuck in Full Screen?** If you click the green maximize button and lose your Mac window controls, press `Cmd + F` to toggle QEMU's full-screen mode off and get your buttons back.
+- **Scaling the Screen:** You do not need to use full-screen to get a large window! Thanks to the `zoom-to-fit=on` flag, you can simply drag the corner of the QEMU window to stretch it. The MiniOS display will scale up beautifully while keeping your window controls visible.
+
 ---
 
 ## Learning Milestones

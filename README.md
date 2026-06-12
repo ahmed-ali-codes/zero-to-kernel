@@ -8,6 +8,8 @@ Boots via GRUB 2 and runs inside the QEMU emulator.
 **Target**: x86 (i686), 32-bit protected mode
 
 ---
+![Uploading Screenshot 2026-06-12 at 7.02.02 AM.png…]()
+
 
 ## Features (v1.0)
 

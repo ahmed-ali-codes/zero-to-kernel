@@ -14,8 +14,8 @@
 /* --------------------------------------------------------------------------
  * Filesystem constraints
  * -------------------------------------------------------------------------- */
-#define FS_MAX_FILES      16
-#define FS_MAX_FILENAME   32
+#define FS_MAX_FILES      32
+#define FS_MAX_FILENAME   64
 #define FS_MAX_FILESIZE   256
 
 /* --------------------------------------------------------------------------
@@ -28,6 +28,12 @@ void fs_init(void);
 /* Create a new empty file. Returns 0 on success, -1 on error. */
 int fs_create(const char *name);
 
+/* Create a new directory. Returns 0 on success, -1 on error. */
+int fs_create_dir(const char *name);
+
+/* Check if a given path is a directory. Returns 1 if true, 0 if false. */
+int fs_is_dir(const char *name);
+
 /* Write data to a file, replacing its contents.
  * Returns number of bytes written, or -1 on error. */
 int fs_write(const char *name, const char *data, size_t len);
@@ -36,8 +42,8 @@ int fs_write(const char *name, const char *data, size_t len);
  * Returns number of bytes read, or -1 if not found. */
 int fs_read(const char *name, char *buf, size_t buf_size);
 
-/* List all files to the terminal */
-void fs_list(void);
+/* List all files directly under the specified directory to the terminal */
+void fs_list_dir(const char *dir);
 
 /* Get the total number of files currently stored */
 int fs_get_total_files(void);

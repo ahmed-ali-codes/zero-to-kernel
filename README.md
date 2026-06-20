@@ -8,8 +8,22 @@ Boots via GRUB 2 and runs inside the QEMU emulator.
 **Target**: x86 (i686), 32-bit protected mode
 
 ---
+
 <img width="1710" height="1107" alt="Screenshot 2026-06-12 at 7 02 02 AM" src="https://github.com/user-attachments/assets/eb545564-94e4-43a0-823f-59f94613b47b" />
 
+---
+
+## 📖 Project Documentation
+
+For in-depth explanations of the system design, APIs, code standards, and testing procedures, please refer to the specialized documentation:
+
+*   **[ARCHITECTURE.md](file:///Users/apple/Documents/Ecotrustia-data/Own-projects-planning/mini-os/MiniOS/ARCHITECTURE.md)**: Details GDT/IDT tables, PIC remapping, memory management internals, hardware drivers, and the hierarchical `MiniFS` filesystem.
+*   **[DEVELOPER_GUIDE.md](file:///Users/apple/Documents/Ecotrustia-data/Own-projects-planning/mini-os/MiniOS/DEVELOPER_GUIDE.md)**: Setup the cross-compiler toolchain, build command lines, coding standards, and interactive GDB kernel debugging.
+*   **[API_REFERENCE.md](file:///Users/apple/Documents/Ecotrustia-data/Own-projects-planning/mini-os/MiniOS/API_REFERENCE.md)**: Developer documentation for kernel module entry points, terminal writers, memory allocation, keyboard buffers, and filesystem APIs.
+*   **[TESTING.md](file:///Users/apple/Documents/Ecotrustia-data/Own-projects-planning/mini-os/MiniOS/TESTING.md)**: Manual verification checklists for boot routines, shell commands, filesystems, and memory leak tests.
+*   **[CHANGELOG.md](file:///Users/apple/Documents/Ecotrustia-data/Own-projects-planning/mini-os/MiniOS/CHANGELOG.md)**: Version history, tags, and features catalog from version `v0.1` up to the current release.
+
+---
 
 ## Features (v1.0)
 
@@ -21,9 +35,11 @@ Boots via GRUB 2 and runs inside the QEMU emulator.
 | IDT | 32 CPU exception handlers + 16 hardware IRQ gates |
 | PIC | 8259A remapped (IRQ 0-15 → vectors 32-47) |
 | Keyboard | IRQ1, PS/2 scancode set 1, US QWERTY, ring buffer, Shift/CapsLock |
-| Shell | 9 built-in commands with colour output |
-| Memory | 256 KiB heap, block-list allocator, kmalloc/kfree |
-| Filesystem | Flat in-memory file table — 16 files × 256 bytes |
+| Mouse | IRQ12, PS/2 IntelliMouse scroll support, scroll-wheel terminal interaction |
+| Shell | 30+ interactive shell utilities (calculator, passgen, todo manager, notes) |
+| Memory | 256 KiB heap, block-list allocator, kmalloc/kfree with coalescing |
+| Filesystem | Hierarchical in-memory flat filesystem (`MiniFS`) — 32 files/directories, `/root` path resolution |
+| Text Editor | Fullscreen interactive C editor (`MiniEdit`) with ESC-to-save support |
 
 ---
 
@@ -41,7 +57,10 @@ MiniOS/
 │   ├── gdt.c             ; Global Descriptor Table
 │   ├── idt.c             ; Interrupt Descriptor Table + dispatchers
 │   ├── pic.c             ; 8259A PIC driver
+│   ├── timer.c           ; Programmable Interval Timer (PIT)
 │   ├── keyboard.c        ; PS/2 keyboard IRQ1 driver
+│   ├── mouse.c           ; PS/2 IntelliMouse IRQ12 driver
+│   ├── editor.c          ; MiniEdit text editor interface
 │   ├── shell.c           ; Interactive command shell
 │   └── filesystem.c      ; In-memory flat filesystem
 ├── include/              ; Header files for all modules
@@ -100,55 +119,68 @@ grub-mkrescue --version
 
 Once MiniOS boots, you'll see a `>` prompt. Available commands:
 
-```
+```text
 cmds          — show this list
 osinfo        — show OS info and author
 cls           — clear the screen
 wrt [text]    — print text back to screen
 memo          — show heap usage stats
 new [file]    — create a new file
-write  [file] — prompt for text and write it to the file
+edit [file]   — launch MiniEdit text editor
+write [file]  — prompt for text and write it to the file
 see [file]    — display file contents
 laf           — list all files
 del [file]    — permanently deletes a file
-cpy [src] [dst] — copy a file
-mov [src] [dst] — move / rename a file
-hunt [file] [word] — search in file
-cnt [file]    — count words/lines
+cpy [src][dst]— copy a file
+mov [src][dst]— move / rename a file
+hunt[file][w] — search word inside file
+cnt [file]    — count words, lines, and bytes
 flip          — flip a coin
 dice          — roll a dice
+date          — show simulated UTC date
+alive         — show CPU uptime
+calc [expr]   — mathematical calculator (+, -, *, /)
+color [color] — change terminal font color (red, green, blue, yellow, etc.)
+history       — show last 10 commands run
+todo [opts]   — list, add, complete, or clear todo list items
+passgen [len] — generate random password strings
+notes [opts]  — write, list, or view notes
+sysinfo       — diagnostic dashboard
+whoiam        — prints current active user (root)
+rst           — triggers system soft reboot
+bye           — shutdowns the CPU execution
+disk          — prints memory-filesystem statistics
+dtree         — prints nested folder hierarchy visual tree
 ```
 
 ### Example session
 
 ```
-MiniOS v1.0 — Type 'cmds' for available commands.
-
-> wrt hello from MiniOS
+minios:/root> wrt hello from MiniOS
 hello from MiniOS
 
-> new notes
-Created: notes
+minios:/root> new notes.txt
+Created: /root/notes.txt
 
-> write notes
+minios:/root> write notes.txt
 Enter text: This is my first OS file
-Written to notes (23 bytes)
+Written to /root/notes.txt (25 bytes)
 
-> laf
-  notes                     (23 bytes)
+minios:/root> laf
+  notes.txt                 (25 bytes)
   1 file(s)
 
-> memo
+minios:/root> memo
 Heap total : 262144 bytes
-Heap used  : 24 bytes
-Heap free  : 262120 bytes
+Heap used  : 25 bytes
+Heap free  : 262119 bytes
 
-> osinfo
+minios:/root> osinfo
   MiniOS v1.0
   Built by Ahmed Ali
   Stack: C99 + x86 Assembly, GRUB 2, QEMU
 
-> xyz
+minios:/root> xyz
 Unknown command: 'xyz'
 Type 'cmds' for a list of commands.
 ```
@@ -182,10 +214,6 @@ qemu-system-i386 -cdrom iso/minios.iso -d int,cpu_reset -no-reboot
 (gdb) break kernel_main        # set breakpoint
 ```
 
-### QEMU Display Tips (macOS)
-- **Stuck in Full Screen?** If you click the green maximize button and lose your Mac window controls, press `Cmd + F` to toggle QEMU's full-screen mode off and get your buttons back.
-- **Scaling the Screen:** You do not need to use full-screen to get a large window! Thanks to the `zoom-to-fit=on` flag, you can simply drag the corner of the QEMU window to stretch it. The MiniOS display will scale up beautifully while keeping your window controls visible.
-
 ---
 
 ## Learning Milestones
@@ -203,11 +231,11 @@ qemu-system-i386 -cdrom iso/minios.iso -d int,cpu_reset -no-reboot
 
 ## References
 
-- [OSDev Wiki](https://wiki.osdev.org) — The definitive beginner reference
-- [James Molloy's Kernel Dev Tutorial](http://www.jamesmolloy.co.uk/tutorial_html/) — GDT/IDT/keyboard
-- [Bran's Kernel Dev Tutorial](http://www.osdever.net/bkerndev/) — VGA + shell
-- [Nick Blundell — Writing a Simple OS from Scratch (PDF)](https://www.cs.bham.ac.uk/~exr/lectures/opsys/10_11/lectures/os-dev.pdf)
-- [QEMU Documentation](https://www.qemu.org/docs/master/) — debug flags
+*   [OSDev Wiki](https://wiki.osdev.org) — The definitive beginner reference
+*   [James Molloy's Kernel Dev Tutorial](http://www.jamesmolloy.co.uk/tutorial_html/) — GDT/IDT/keyboard
+*   [Bran's Kernel Dev Tutorial](http://www.osdever.net/bkerndev/) — VGA + shell
+*   [Nick Blundell — Writing a Simple OS from Scratch (PDF)](https://www.cs.bham.ac.uk/~exr/lectures/opsys/10_11/lectures/os-dev.pdf)
+*   [QEMU Documentation](https://www.qemu.org/docs/master/) — debug flags
 
 ---
 

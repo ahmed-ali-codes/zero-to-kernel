@@ -108,10 +108,11 @@ iso: $(ISO_DIR)/minios.iso
 
 $(ISO_DIR)/minios.iso: $(KERNEL_BIN)
 	@echo "  [ISO]  Building bootable ISO..."
-	@mkdir -p $(ISO_DIR)/boot/grub
-	@cp $(KERNEL_BIN) $(ISO_DIR)/boot/kernel.bin
-	@cp grub/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
-	@$(GRUB_MKRESCUE) -o $(ISO_DIR)/minios.iso $(ISO_DIR) 2>/dev/null
+	@mkdir -p $(BUILD_DIR)/iso/boot/grub
+	@cp $(KERNEL_BIN) $(BUILD_DIR)/iso/boot/kernel.bin
+	@cp grub/grub.cfg $(BUILD_DIR)/iso/boot/grub/grub.cfg
+	@mkdir -p $(ISO_DIR)
+	@$(GRUB_MKRESCUE) -o $(ISO_DIR)/minios.iso $(BUILD_DIR)/iso 2>/dev/null
 	@echo "  [ISO]  Created: $(ISO_DIR)/minios.iso"
 
 # --------------------------------------------------------------------------
@@ -175,5 +176,5 @@ debug: iso
 .PHONY: clean
 clean:
 	@echo "  [CLN]  Removing build output..."
-	@rm -rf $(BUILD_DIR) $(ISO_DIR)/boot/kernel.bin $(ISO_DIR)/minios.iso
+	@rm -rf $(BUILD_DIR) $(ISO_DIR)
 	@echo "  [CLN]  Done."

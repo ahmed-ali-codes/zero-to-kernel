@@ -45,6 +45,9 @@ int fs_read(const char *name, char *buf, size_t buf_size);
 /* List all files directly under the specified directory to the terminal */
 void fs_list_dir(const char *dir);
 
+/* List only note files (starting with note_) in the specified directory */
+void fs_list_notes(const char *dir);
+
 /* Get the total number of files currently stored */
 int fs_get_total_files(void);
 

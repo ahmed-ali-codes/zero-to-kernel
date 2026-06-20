@@ -495,19 +495,23 @@ static void cmd_notes(const char *arg) {
     char body[FS_MAX_FILESIZE];
     keyboard_readline(body, sizeof(body));
 
-    char filename[64];
-    strcpy(filename, "note_");
-    strncpy(filename + 5, title, 20);
+    char raw_filename[64];
+    strcpy(raw_filename, "note_");
+    strncpy(raw_filename + 5, title, 20);
+    raw_filename[25] = '\0';
+    
+    char path[64];
+    resolve_path(raw_filename, path);
 
-    fs_create(filename);
-    fs_write(filename, body, strlen(body));
+    fs_create(path);
+    fs_write(path, body, strlen(body));
     terminal_writestring("Saved.\n");
   } else if (strcmp(arg, "list") == 0) {
     terminal_writestring("Notes:\n");
-    fs_list_dir(current_dir);
+    fs_list_notes(current_dir);
   } else if (strncmp(arg, "view ", 5) == 0) {
-    char filename[64];
-    strcpy(filename, "note_");
+    char raw_filename[64];
+    strcpy(raw_filename, "note_");
 
     const char *title = arg + 5;
     if (*title == '"')
@@ -516,11 +520,14 @@ static void cmd_notes(const char *arg) {
     if (tlen > 0 && title[tlen - 1] == '"')
       tlen--;
 
-    strncpy(filename + 5, title, tlen);
-    filename[5 + tlen] = '\0';
+    strncpy(raw_filename + 5, title, tlen);
+    raw_filename[5 + tlen] = '\0';
+
+    char path[64];
+    resolve_path(raw_filename, path);
 
     char read_buf[FS_MAX_FILESIZE + 1];
-    if (fs_read(filename, read_buf, sizeof(read_buf)) >= 0) {
+    if (fs_read(path, read_buf, sizeof(read_buf)) >= 0) {
       terminal_printf("--- %s ---\n%s\n", title, read_buf);
     } else {
       terminal_writestring("Note not found.\n");

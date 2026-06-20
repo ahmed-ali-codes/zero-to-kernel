@@ -178,6 +178,40 @@ void fs_list_dir(const char *dir) {
     }
 }
 
+void fs_list_notes(const char *dir) {
+    int count = 0;
+    int dir_len = strlen(dir);
+    for (int i = 0; i < FS_MAX_FILES; i++) {
+        if (fs_table[i].used && !fs_table[i].is_dir) {
+            const char *fname = fs_table[i].name;
+            int match = 0;
+            const char *child_name = NULL;
+            if (strcmp(dir, "/") == 0) {
+                if (fname[0] == '/') {
+                    child_name = fname + 1;
+                    match = 1;
+                }
+            } else {
+                if (strncmp(fname, dir, dir_len) == 0 && fname[dir_len] == '/') {
+                    child_name = fname + dir_len + 1;
+                    match = 1;
+                }
+            }
+            if (match && child_name && strchr(child_name, '/') == NULL) {
+                if (strncmp(child_name, "note_", 5) == 0) {
+                    terminal_printf("  %-24s  (%d bytes)\n", child_name + 5, fs_table[i].size);
+                    count++;
+                }
+            }
+        }
+    }
+    if (count == 0) {
+        terminal_writestring("  (no notes)\n");
+    } else {
+        terminal_printf("  %d note(s)\n", count);
+    }
+}
+
 int fs_delete(const char *name) {
     int idx = fs_find(name);
     if (idx < 0) return -1;

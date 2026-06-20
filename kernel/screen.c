@@ -204,7 +204,29 @@ void terminal_putchar(char c) {
     vga_buf[term_row * VGA_COLS + term_col] = make_vga_entry(c, term_color);
     term_col++;
     
-    outb(0x3F8, c);
+    if ((uint8_t)c == 179) {
+        /* UTF-8 for │ is \xE2\x94\x82 */
+        outb(0x3F8, 0xE2);
+        outb(0x3F8, 0x94);
+        outb(0x3F8, 0x82);
+    } else if ((uint8_t)c == 195) {
+        /* UTF-8 for ├ is \xE2\x94\x9C */
+        outb(0x3F8, 0xE2);
+        outb(0x3F8, 0x94);
+        outb(0x3F8, 0x9C);
+    } else if ((uint8_t)c == 196) {
+        /* UTF-8 for ─ is \xE2\x94\x80 */
+        outb(0x3F8, 0xE2);
+        outb(0x3F8, 0x94);
+        outb(0x3F8, 0x80);
+    } else if ((uint8_t)c == 192) {
+        /* UTF-8 for └ is \xE2\x94\x94 */
+        outb(0x3F8, 0xE2);
+        outb(0x3F8, 0x94);
+        outb(0x3F8, 0x94);
+    } else {
+        outb(0x3F8, c);
+    }
 
     if (term_col >= VGA_COLS) {
         term_col = 0;

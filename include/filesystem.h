@@ -54,4 +54,7 @@ int fs_get_total_files(void);
 /* Delete a file. Returns 0 on success, -1 if not found. */
 int fs_delete(const char *name);
 
+/* Print a hierarchical directory tree visualization starting from the specified directory */
+void fs_print_tree(const char *dir);
+
 #endif /* FILESYSTEM_H */

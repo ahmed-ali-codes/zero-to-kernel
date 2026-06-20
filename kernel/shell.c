@@ -23,6 +23,10 @@ static char shell_history[HISTORY_MAX][INPUT_MAX];
 static int history_count = 0;
 static int total_commands_run = 0;
 
+/* Terminal default text color */
+static vga_color_t shell_text_color = COLOR_WHITE;
+
+
 /* Todo tracking */
 #define TODO_MAX 20
 typedef struct {
@@ -200,7 +204,7 @@ static void print_prompt(void) {
   terminal_writestring(current_dir);
   terminal_setcolor(COLOR_LIGHT_GREEN, COLOR_BLACK);
   terminal_writestring("> ");
-  terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+  terminal_setcolor(shell_text_color, COLOR_BLACK);
 }
 
 /* --------------------------------------------------------------------------
@@ -231,7 +235,7 @@ static void cmd_cmds(void) {
   terminal_writestring("  passgen [len] -- generate a random password\n");
   terminal_writestring("  notes [opts]  -- notes app (new/list/view)\n");
   terminal_writestring("  sysinfo       -- system info dashboard\n");
-  terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+  terminal_setcolor(shell_text_color, COLOR_BLACK);
 }
 
 static void cmd_osinfo(void) {
@@ -241,7 +245,7 @@ static void cmd_osinfo(void) {
   terminal_setcolor(COLOR_LIGHT_GREY, COLOR_BLACK);
   terminal_writestring("  Built by Ahmed Ali\n");
   terminal_writestring("  Stack: C99 + x86 Assembly, GRUB 2, QEMU\n");
-  terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+  terminal_setcolor(shell_text_color, COLOR_BLACK);
 }
 
 static void cmd_wrt(const char *arg) {
@@ -258,6 +262,17 @@ static void cmd_memo(void) {
 static void cmd_new(const char *arg) {
   if (!arg || *arg == '\0') {
     terminal_writestring("Usage: new [filename]\n");
+    return;
+  }
+  const char *filename = strrchr(arg, '/');
+  if (filename) {
+    filename++;
+  } else {
+    filename = arg;
+  }
+  const char *dot = strchr(filename, '.');
+  if (!dot || dot == filename || *(dot + 1) == '\0') {
+    terminal_writestring("\nError: Filename must have an extension (e.g., filename.txt)\n");
     return;
   }
   char path[64];
@@ -371,21 +386,22 @@ static void cmd_calc(const char *arg) {
 
 static void cmd_color(const char *arg) {
   if (strcmp(arg, "red") == 0)
-    terminal_setcolor(COLOR_LIGHT_RED, COLOR_BLACK);
+    shell_text_color = COLOR_LIGHT_RED;
   else if (strcmp(arg, "green") == 0)
-    terminal_setcolor(COLOR_LIGHT_GREEN, COLOR_BLACK);
+    shell_text_color = COLOR_LIGHT_GREEN;
   else if (strcmp(arg, "blue") == 0)
-    terminal_setcolor(COLOR_LIGHT_BLUE, COLOR_BLACK);
+    shell_text_color = COLOR_LIGHT_BLUE;
   else if (strcmp(arg, "white") == 0)
-    terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+    shell_text_color = COLOR_WHITE;
   else if (strcmp(arg, "yellow") == 0)
-    terminal_setcolor(COLOR_YELLOW, COLOR_BLACK);
+    shell_text_color = COLOR_YELLOW;
   else if (strcmp(arg, "cyan") == 0)
-    terminal_setcolor(COLOR_LIGHT_CYAN, COLOR_BLACK);
+    shell_text_color = COLOR_LIGHT_CYAN;
   else {
     terminal_writestring("\nUsage: color [red|green|blue|white|yellow|cyan]\n");
     return;
   }
+  terminal_setcolor(shell_text_color, COLOR_BLACK);
   terminal_writestring("\nColor changed.\n");
 }
 
@@ -542,7 +558,7 @@ static void cmd_fm(void) {
     terminal_clear();
     terminal_setcolor(COLOR_LIGHT_CYAN, COLOR_BLACK);
     terminal_writestring("  === MiniOS File Manager ===\n");
-    terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+    terminal_setcolor(shell_text_color, COLOR_BLACK);
 
     terminal_writestring("  Files:\n");
     fs_list_dir(current_dir);
@@ -758,7 +774,7 @@ static void cmd_deld(const char *arg) {
 }
 
 static void cmd_dtree(void) {
-  terminal_writestring("/root\n  (Filesystem is flat, directories not fully supported)\n");
+  fs_print_tree(current_dir);
 }
 
 static void cmd_whoiam(void) {
@@ -887,9 +903,11 @@ static void cmd_top(const char *arg) {
     terminal_writestring("Usage: top [file] [n]\n");
     return;
   }
+  char path[64];
+  resolve_path(file, path);
   char buf[FS_MAX_FILESIZE + 1];
-  if (fs_read(file, buf, sizeof(buf)) < 0) {
-    terminal_printf("Error: file '%s' not found.\n", file);
+  if (fs_read(path, buf, sizeof(buf)) < 0) {
+    terminal_printf("Error: file '%s' not found.\n", path);
     return;
   }
   int line = 1;
@@ -911,8 +929,72 @@ static void cmd_top(const char *arg) {
 }
 
 static void cmd_btm(const char *arg) {
-  (void)arg;
-  terminal_writestring("btm not fully implemented yet.\n");
+  char file[32];
+  int count = 10;
+  if (!arg) {
+    terminal_writestring("Usage: btm [file] [n]\n");
+    return;
+  }
+  arg = skip_spaces(arg);
+  const char *space = strchr(arg, ' ');
+  if (space) {
+    size_t len1 = space - arg;
+    if (len1 >= sizeof(file)) len1 = sizeof(file) - 1;
+    strncpy(file, arg, len1);
+    file[len1] = '\0';
+    count = atoi(skip_spaces(space));
+  } else {
+    strncpy(file, arg, sizeof(file) - 1);
+    file[sizeof(file) - 1] = '\0';
+  }
+  
+  if (file[0] == '\0') {
+    terminal_writestring("Usage: btm [file] [n]\n");
+    return;
+  }
+  char path[64];
+  resolve_path(file, path);
+  char buf[FS_MAX_FILESIZE + 1];
+  if (fs_read(path, buf, sizeof(buf)) < 0) {
+    terminal_printf("Error: file '%s' not found.\n", path);
+    return;
+  }
+  
+  int total_lines = 0;
+  char *p = buf;
+  while (*p) {
+    if (*p == '\n') {
+      total_lines++;
+    }
+    p++;
+  }
+  if (p > buf && *(p - 1) != '\n') {
+    total_lines++;
+  }
+  
+  int start_line = total_lines - count + 1;
+  if (start_line < 1) {
+    start_line = 1;
+  }
+  
+  int current_line = 1;
+  p = buf;
+  char *line_start = buf;
+  while (*p) {
+    if (*p == '\n') {
+      *p = '\0';
+      if (current_line >= start_line) {
+        terminal_printf("Line %d: %s\n", current_line, line_start);
+      }
+      *p = '\n';
+      line_start = p + 1;
+      current_line++;
+    }
+    p++;
+  }
+  if (*line_start && current_line >= start_line) {
+    terminal_printf("Line %d: %s\n", current_line, line_start);
+  }
 }
 
 static void cmd_flip(void) {
@@ -929,7 +1011,7 @@ static void cmd_dice(void) {
 static void cmd_splash(void) {
   terminal_setcolor(COLOR_LIGHT_CYAN, COLOR_BLACK);
   terminal_writestring("\n  === Welcome to MiniOS ===\n\n");
-  terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+  terminal_setcolor(shell_text_color, COLOR_BLACK);
 }
 
 static void cmd_ver(void) {
@@ -941,7 +1023,79 @@ static void cmd_ref(const char *arg) {
     terminal_writestring("Usage: ref [cmd]\n");
     return;
   }
-  terminal_printf("%s -- see 'cmds' for a full list of commands.\n", arg);
+  if (strcmp(arg, "new") == 0) {
+    terminal_writestring("  new [file] -- Create empty file\n  Example: new notes.txt\n");
+  } else if (strcmp(arg, "see") == 0) {
+    terminal_writestring("  see [file] -- Display file contents\n  Example: see notes.txt\n");
+  } else if (strcmp(arg, "del") == 0) {
+    terminal_writestring("  del [file] -- permanently deletes a file\n  Example: del notes.txt\n");
+  } else if (strcmp(arg, "cpy") == 0) {
+    terminal_writestring("  cpy [src] [dst] -- Copy a file\n  Example: cpy notes.txt backup.txt\n");
+  } else if (strcmp(arg, "mov") == 0) {
+    terminal_writestring("  mov [src] [dst] -- Move / rename a file\n  Example: mov old.txt new.txt\n");
+  } else if (strcmp(arg, "look") == 0) {
+    terminal_writestring("  look [name] -- Search for a file\n  Example: look todo\n");
+  } else if (strcmp(arg, "laf") == 0) {
+    terminal_writestring("  laf -- List files\n  Example: laf\n");
+  } else if (strcmp(arg, "wdir") == 0) {
+    terminal_writestring("  wdir -- Show current directory\n  Example: wdir\n");
+  } else if (strcmp(arg, "goto") == 0) {
+    terminal_writestring("  goto [dir] -- Change directory\n  Example: goto docs\n");
+  } else if (strcmp(arg, "mkd") == 0) {
+    terminal_writestring("  mkd [dir] -- Create directory\n  Example: mkd projects\n");
+  } else if (strcmp(arg, "deld") == 0) {
+    terminal_writestring("  deld [dir] -- Delete directory\n  Example: deld projects\n");
+  } else if (strcmp(arg, "dtree") == 0) {
+    terminal_writestring("  dtree -- Show directory tree\n  Example: dtree\n");
+  } else if (strcmp(arg, "cls") == 0) {
+    terminal_writestring("  cls -- Clear screen\n  Example: cls\n");
+  } else if (strcmp(arg, "wrt") == 0) {
+    terminal_writestring("  wrt [text] -- Print text\n  Example: wrt Hello from MiniOS\n");
+  } else if (strcmp(arg, "osinfo") == 0) {
+    terminal_writestring("  osinfo -- OS name and version\n  Example: osinfo\n");
+  } else if (strcmp(arg, "alive") == 0 || strcmp(arg, "uptime") == 0) {
+    terminal_writestring("  alive / uptime -- Uptime since boot\n  Example: uptime\n");
+  } else if (strcmp(arg, "whoiam") == 0) {
+    terminal_writestring("  whoiam -- Current user\n  Example: whoiam\n");
+  } else if (strcmp(arg, "rst") == 0) {
+    terminal_writestring("  rst -- Restart OS\n  Example: rst\n");
+  } else if (strcmp(arg, "bye") == 0) {
+    terminal_writestring("  bye -- Shutdown OS\n  Example: bye\n");
+  } else if (strcmp(arg, "memo") == 0) {
+    terminal_writestring("  memo -- Heap memory stats\n  Example: memo\n");
+  } else if (strcmp(arg, "disk") == 0) {
+    terminal_writestring("  disk -- Filesystem stats\n  Example: disk\n");
+  } else if (strcmp(arg, "hunt") == 0) {
+    terminal_writestring("  hunt [file] [word] -- Search in file\n  Example: hunt notes.txt meeting\n");
+  } else if (strcmp(arg, "cnt") == 0) {
+    terminal_writestring("  cnt [file] -- Count words/lines\n  Example: cnt notes.txt\n");
+  } else if (strcmp(arg, "top") == 0) {
+    terminal_writestring("  top [file] [n] -- First N lines\n  Example: top notes.txt 3\n");
+  } else if (strcmp(arg, "btm") == 0) {
+    terminal_writestring("  btm [file] [n] -- Last N lines\n  Example: btm notes.txt 3\n");
+  } else if (strcmp(arg, "todo") == 0) {
+    terminal_writestring("  todo -- To-do list manager\n  Example: todo\n");
+  } else if (strcmp(arg, "calc") == 0) {
+    terminal_writestring("  calc -- Calculator\n  Example: calc\n");
+  } else if (strcmp(arg, "passgen") == 0) {
+    terminal_writestring("  passgen [n] -- Password generator\n  Example: passgen 16\n");
+  } else if (strcmp(arg, "flip") == 0) {
+    terminal_writestring("  flip -- Flip a coin\n  Example: flip\n");
+  } else if (strcmp(arg, "dice") == 0) {
+    terminal_writestring("  dice -- Roll a dice\n  Example: dice\n");
+  } else if (strcmp(arg, "color") == 0) {
+    terminal_writestring("  color [name] -- Change text colour\n  Example: color green\n");
+  } else if (strcmp(arg, "splash") == 0) {
+    terminal_writestring("  splash -- Show boot screen\n  Example: splash\n");
+  } else if (strcmp(arg, "ver") == 0) {
+    terminal_writestring("  ver -- Version info\n  Example: ver\n");
+  } else if (strcmp(arg, "ref") == 0) {
+    terminal_writestring("  ref [cmd] -- Help for a command\n  Example: ref del\n");
+  } else if (strcmp(arg, "cmds") == 0) {
+    terminal_writestring("  cmds -- List all commands\n  Example: cmds\n");
+  } else {
+    terminal_printf("  %s -- see 'cmds' for a full list of commands.\n", arg);
+  }
 }
 
 static void cmd_sysinfo(void) {
@@ -956,7 +1110,7 @@ static void cmd_sysinfo(void) {
   terminal_writestring("\n  ================================\n");
   terminal_writestring("  MiniOS v1.0 - by Ahmed Ali\n");
   terminal_writestring("  ================================\n");
-  terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+  terminal_setcolor(shell_text_color, COLOR_BLACK);
 
   terminal_printf("  Files stored: %d\n", fs_get_total_files());
   terminal_printf("  Uptime      : %02d:%02d:%02d\n", h, m, s);
@@ -964,7 +1118,7 @@ static void cmd_sysinfo(void) {
 
   terminal_setcolor(COLOR_LIGHT_CYAN, COLOR_BLACK);
   terminal_writestring("  ================================\n");
-  terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+  terminal_setcolor(shell_text_color, COLOR_BLACK);
 }
 
 /* --------------------------------------------------------------------------
@@ -1023,7 +1177,7 @@ void shell_run(void) {
     else if (strcmp(cmd, "see") == 0) cmd_see(arg);
     else if (strcmp(cmd, "laf") == 0) cmd_laf();
     else if (strcmp(cmd, "date") == 0) cmd_date();
-    else if (strcmp(cmd, "alive") == 0) cmd_alive();
+    else if (strcmp(cmd, "alive") == 0 || strcmp(cmd, "uptime") == 0) cmd_alive();
     else if (strcmp(cmd, "calc") == 0) cmd_calc(arg);
     else if (strcmp(cmd, "color") == 0) cmd_color(arg);
     else if (strcmp(cmd, "history") == 0) cmd_show_history();
@@ -1058,7 +1212,7 @@ void shell_run(void) {
       terminal_setcolor(COLOR_LIGHT_RED, COLOR_BLACK);
       terminal_printf("\nUnknown command: '%s'\n", cmd);
       terminal_writestring("Type 'cmds' for a list of commands.\n");
-      terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+      terminal_setcolor(shell_text_color, COLOR_BLACK);
     }
   }
 }

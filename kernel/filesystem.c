@@ -24,6 +24,7 @@ typedef struct {
     char  data[FS_MAX_FILESIZE];
     int   size;
     int   used;
+    int   is_dir;
 } file_entry_t;
 
 /* --------------------------------------------------------------------------
@@ -56,6 +57,7 @@ static int fs_free_slot(void) {
 
 void fs_init(void) {
     memset(fs_table, 0, sizeof(fs_table));
+    fs_create_dir("/root");
 }
 
 int fs_create(const char *name) {
@@ -64,7 +66,7 @@ int fs_create(const char *name) {
         return -1;
     }
     if (strlen(name) >= FS_MAX_FILENAME) {
-        terminal_writestring("Error: file name too long (max 31 chars).\n");
+        terminal_writestring("Error: file name too long (max 63 chars).\n");
         return -1;
     }
     if (fs_find(name) >= 0) {
@@ -73,7 +75,7 @@ int fs_create(const char *name) {
     }
     int slot = fs_free_slot();
     if (slot < 0) {
-        terminal_writestring("Error: filesystem full (max 16 files).\n");
+        terminal_writestring("Error: filesystem full (max 32 files).\n");
         return -1;
     }
 
@@ -81,6 +83,30 @@ int fs_create(const char *name) {
     fs_table[slot].name[FS_MAX_FILENAME - 1] = '\0';
     fs_table[slot].size = 0;
     fs_table[slot].used = 1;
+    fs_table[slot].is_dir = 0;
+    return 0;
+}
+
+int fs_create_dir(const char *name) {
+    if (!name || strlen(name) == 0) return -1;
+    if (strlen(name) >= FS_MAX_FILENAME) return -1;
+    if (fs_find(name) >= 0) return -1;
+    int slot = fs_free_slot();
+    if (slot < 0) return -1;
+
+    strncpy(fs_table[slot].name, name, FS_MAX_FILENAME - 1);
+    fs_table[slot].name[FS_MAX_FILENAME - 1] = '\0';
+    fs_table[slot].size = 0;
+    fs_table[slot].used = 1;
+    fs_table[slot].is_dir = 1;
+    return 0;
+}
+
+int fs_is_dir(const char *name) {
+    if (!name) return 0;
+    if (strcmp(name, "/") == 0) return 1;
+    int idx = fs_find(name);
+    if (idx >= 0 && fs_table[idx].is_dir) return 1;
     return 0;
 }
 
@@ -88,6 +114,10 @@ int fs_write(const char *name, const char *data, size_t len) {
     int idx = fs_find(name);
     if (idx < 0) {
         terminal_printf("Error: file '%s' not found.\n", name);
+        return -1;
+    }
+    if (fs_table[idx].is_dir) {
+        terminal_printf("Error: '%s' is a directory.\n", name);
         return -1;
     }
     if (len > FS_MAX_FILESIZE) {
@@ -100,7 +130,7 @@ int fs_write(const char *name, const char *data, size_t len) {
 
 int fs_read(const char *name, char *buf, size_t buf_size) {
     int idx = fs_find(name);
-    if (idx < 0) {
+    if (idx < 0 || fs_table[idx].is_dir) {
         return -1;
     }
     size_t n = (size_t)fs_table[idx].size;
@@ -110,19 +140,41 @@ int fs_read(const char *name, char *buf, size_t buf_size) {
     return (int)n;
 }
 
-void fs_list(void) {
+void fs_list_dir(const char *dir) {
     int count = 0;
+    int dir_len = strlen(dir);
     for (int i = 0; i < FS_MAX_FILES; i++) {
         if (fs_table[i].used) {
-            terminal_printf("  %-24s  (%d bytes)\n",
-                            fs_table[i].name, fs_table[i].size);
-            count++;
+            const char *fname = fs_table[i].name;
+            int match = 0;
+            const char *child_name = NULL;
+            if (strcmp(dir, "/") == 0) {
+                if (fname[0] == '/') {
+                    child_name = fname + 1;
+                    match = 1;
+                }
+            } else {
+                if (strncmp(fname, dir, dir_len) == 0 && fname[dir_len] == '/') {
+                    child_name = fname + dir_len + 1;
+                    match = 1;
+                }
+            }
+            if (match && child_name && strchr(child_name, '/') == NULL) {
+                if (fs_table[i].is_dir) {
+                    terminal_setcolor(COLOR_LIGHT_BLUE, COLOR_BLACK);
+                    terminal_printf("  %-24s  <DIR>\n", child_name);
+                    terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
+                } else {
+                    terminal_printf("  %-24s  (%d bytes)\n", child_name, fs_table[i].size);
+                }
+                count++;
+            }
         }
     }
     if (count == 0) {
         terminal_writestring("  (no files)\n");
     } else {
-        terminal_printf("  %d file(s)\n", count);
+        terminal_printf("  %d item(s)\n", count);
     }
 }
 

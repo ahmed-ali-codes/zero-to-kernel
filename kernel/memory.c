@@ -170,6 +170,30 @@ char *strchr(const char *s, int c) {
     return 0;
 }
 
+char *strcat(char *dest, const char *src) {
+    char *d = dest;
+    while (*d) d++;
+    while (*src) *d++ = *src++;
+    *d = '\0';
+    return dest;
+}
+
+char *strncat(char *dest, const char *src, size_t n) {
+    char *d = dest;
+    while (*d) d++;
+    while (n-- && *src) *d++ = *src++;
+    *d = '\0';
+    return dest;
+}
+
+char *strrchr(const char *s, int c) {
+    const char *last = 0;
+    do {
+        if (*s == (char)c) last = s;
+    } while (*s++);
+    return (char *)last;
+}
+
 /* Integer to ASCII string (supports base 10 and 16) */
 void itoa(int value, char *buf, int base) {
     char tmp[32];

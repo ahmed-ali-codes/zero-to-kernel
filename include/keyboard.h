@@ -14,6 +14,12 @@
  * Public API
  * -------------------------------------------------------------------------- */
 
+/* Special control characters used by keyboard_getchar() for arrow keys */
+#define KEY_UP_ARROW    0x11
+#define KEY_DOWN_ARROW  0x12
+#define KEY_RIGHT_ARROW 0x13
+#define KEY_LEFT_ARROW  0x14
+
 /* Install the keyboard IRQ handler (call after IDT + PIC are ready) */
 void keyboard_install(void);
 

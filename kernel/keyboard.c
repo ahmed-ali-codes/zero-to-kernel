@@ -112,37 +112,40 @@ static void keyboard_irq_handler(registers_t *regs) {
     /* Ignore key-release events (bit 7 set) */
     if (scancode & 0x80) return;
 
+    char c = 0;
+    
     /* Handle scrollback via extended keys */
     if (is_e0) {
         extern void terminal_scroll_up(int lines);
         extern void terminal_scroll_down(int lines);
         
         if (scancode == 0x48) { /* Up Arrow */
-            if (shift_held) terminal_scroll_up(1);
-            return;
-        }
-        if (scancode == 0x50) { /* Down Arrow */
-            if (shift_held) terminal_scroll_down(1);
-            return;
-        }
-        if (scancode == 0x49) { /* Page Up */
+            if (shift_held) { terminal_scroll_up(1); return; }
+            c = KEY_UP_ARROW;
+        } else if (scancode == 0x50) { /* Down Arrow */
+            if (shift_held) { terminal_scroll_down(1); return; }
+            c = KEY_DOWN_ARROW;
+        } else if (scancode == 0x4B) { /* Left Arrow */
+            c = KEY_LEFT_ARROW;
+        } else if (scancode == 0x4D) { /* Right Arrow */
+            c = KEY_RIGHT_ARROW;
+        } else if (scancode == 0x49) { /* Page Up */
             terminal_scroll_up(10);
             return;
-        }
-        if (scancode == 0x51) { /* Page Down */
+        } else if (scancode == 0x51) { /* Page Down */
             terminal_scroll_down(10);
             return;
+        } else {
+            return; /* ignore other extended keys */
         }
-        return; /* ignore other extended keys */
-    }
-
-    /* Map scancode to ASCII */
-    char c;
-    if (scancode < 128) {
-        int use_upper = shift_held ^ capslock_on;
-        c = use_upper ? scancode_map_upper[scancode] : scancode_map_lower[scancode];
     } else {
-        return;
+        /* Map scancode to ASCII */
+        if (scancode < 128) {
+            int use_upper = shift_held ^ capslock_on;
+            c = use_upper ? scancode_map_upper[scancode] : scancode_map_lower[scancode];
+        } else {
+            return;
+        }
     }
 
     if (c == 0) return;  /* unmapped */

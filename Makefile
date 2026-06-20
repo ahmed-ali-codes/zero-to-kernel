@@ -80,6 +80,7 @@ C_SRCS := \
     kernel/timer.c      \
     kernel/keyboard.c   \
     kernel/mouse.c      \
+    kernel/editor.c     \
     kernel/shell.c      \
     kernel/filesystem.c
 
@@ -151,7 +152,6 @@ $(BUILD_DIR)/boot/%.o: boot/%.asm
 run: iso
 	@echo "  [QEMU] Booting MiniOS..."
 	@$(QEMU) -cdrom $(ISO_DIR)/minios.iso -m 32M -serial stdio \
-	         -no-reboot -no-shutdown \
 	         -vga std \
 	         -display cocoa,zoom-to-fit=on
 
@@ -164,7 +164,6 @@ debug: iso
 	@echo "         Connect with: gdb build/kernel.elf"
 	@echo "         Then:         target remote :1234"
 	@$(QEMU) -cdrom $(ISO_DIR)/minios.iso -m 32M \
-	         -no-reboot -no-shutdown \
 	         -vga std \
 	         -display cocoa,zoom-to-fit=on \
 	         -d int,cpu_reset \

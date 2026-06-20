@@ -4,6 +4,7 @@
  */
 
 #include "../include/shell.h"
+#include "../include/editor.h"
 #include "../include/filesystem.h"
 #include "../include/keyboard.h"
 #include "../include/memory.h"
@@ -32,6 +33,26 @@ typedef struct {
 static todo_item_t todos[TODO_MAX];
 static int todo_count = 0;
 static int todo_next_id = 1;
+static char current_dir[64] = "/root";
+
+static void resolve_path(const char *arg, char *out_path) {
+  if (!arg || *arg == '\0') {
+    strcpy(out_path, current_dir);
+    return;
+  }
+  if (arg[0] == '/') {
+    strncpy(out_path, arg, 63);
+    out_path[63] = '\0';
+    return;
+  }
+  
+  strcpy(out_path, current_dir);
+  if (strcmp(out_path, "/") != 0) {
+    strcat(out_path, "/");
+  }
+  strncat(out_path, arg, 63 - strlen(out_path));
+  out_path[63] = '\0';
+}
 
 static const char *skip_spaces(const char *s) {
   while (*s == ' ' || *s == '\t')
@@ -53,7 +74,130 @@ static char *mini_strstr(const char *haystack, const char *needle) {
   return NULL;
 }
 
+static void shell_readline(char *buf, size_t len) {
+  int line_len = 0;
+  int cursor_pos = 0;
+  int history_idx = history_count;
+  
+  buf[0] = '\0';
+  
+  while (1) {
+    char c = keyboard_getchar();
+    
+    if (c == '\n' || c == '\r') {
+      while (cursor_pos < line_len) {
+        terminal_putchar(buf[cursor_pos]);
+        cursor_pos++;
+      }
+      terminal_putchar('\n');
+      buf[line_len] = '\0';
+      break;
+    } else if (c == 8 || c == 127) { /* Backspace */
+      if (cursor_pos > 0) {
+        cursor_pos--;
+        line_len--;
+        for (int i = cursor_pos; i < line_len; i++) {
+          buf[i] = buf[i+1];
+        }
+        buf[line_len] = '\0';
+        
+        terminal_putchar(8);
+        int save_r = terminal_row();
+        int save_c = terminal_col();
+        
+        for (int i = cursor_pos; i < line_len; i++) {
+          terminal_putchar(buf[i]);
+        }
+        terminal_putchar(' ');
+        
+        terminal_setcursor(save_r, save_c);
+      }
+    } else if (c == KEY_LEFT_ARROW) {
+      if (cursor_pos > 0) {
+        cursor_pos--;
+        int r = terminal_row();
+        int c_col = terminal_col();
+        if (c_col > 0) c_col--;
+        else if (r > 0) { r--; c_col = 79; }
+        terminal_setcursor(r, c_col);
+      }
+    } else if (c == KEY_RIGHT_ARROW) {
+      if (cursor_pos < line_len) {
+        int r = terminal_row();
+        int c_col = terminal_col();
+        if (c_col < 79) c_col++;
+        else { r++; c_col = 0; }
+        terminal_setcursor(r, c_col);
+        cursor_pos++;
+      }
+    } else if (c == KEY_UP_ARROW) {
+      if (history_idx > 0) {
+        history_idx--;
+        goto load_history;
+      }
+    } else if (c == KEY_DOWN_ARROW) {
+      if (history_idx < history_count) {
+        history_idx++;
+        goto load_history;
+      }
+    } else if (c >= 32 && c < 127) {
+      if (line_len < (int)len - 1) {
+        for (int i = line_len; i > cursor_pos; i--) {
+          buf[i] = buf[i-1];
+        }
+        buf[cursor_pos] = c;
+        line_len++;
+        buf[line_len] = '\0';
+        
+        int save_r = terminal_row();
+        int save_c = terminal_col();
+        
+        for (int i = cursor_pos; i < line_len; i++) {
+          terminal_putchar(buf[i]);
+        }
+        
+        cursor_pos++;
+        save_c++;
+        if (save_c >= 80) { save_c = 0; save_r++; }
+        if (save_r >= 24) { save_r = 23; } /* Simple cap for scroll */
+        terminal_setcursor(save_r, save_c);
+      }
+    }
+    continue;
+
+  load_history:
+    {
+      int r = terminal_row();
+      int c_col = terminal_col();
+      for (int i = 0; i < cursor_pos; i++) {
+        if (c_col > 0) c_col--;
+        else if (r > 0) { r--; c_col = 79; }
+      }
+      terminal_setcursor(r, c_col);
+      
+      for (int i = 0; i < line_len; i++) terminal_putchar(' ');
+      terminal_setcursor(r, c_col);
+      
+      if (history_idx == history_count) {
+        buf[0] = '\0';
+        line_len = 0;
+        cursor_pos = 0;
+      } else {
+        strncpy(buf, shell_history[history_idx], len - 1);
+        buf[len - 1] = '\0';
+        line_len = strlen(buf);
+        cursor_pos = line_len;
+        terminal_writestring(buf);
+      }
+    }
+  }
+}
+
 static void print_prompt(void) {
+  terminal_setcolor(COLOR_LIGHT_CYAN, COLOR_BLACK);
+  terminal_writestring("minios:");
+  terminal_setcolor(COLOR_LIGHT_BLUE, COLOR_BLACK);
+  terminal_writestring(current_dir);
   terminal_setcolor(COLOR_LIGHT_GREEN, COLOR_BLACK);
   terminal_writestring("> ");
   terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
@@ -73,6 +217,7 @@ static void cmd_cmds(void) {
   terminal_writestring("  wrt [text]    -- print text back to screen\n");
   terminal_writestring("  memo          -- show heap usage stats\n");
   terminal_writestring("  new [file]    -- create a new file\n");
+  terminal_writestring("  edit [file]   -- open file in MiniEdit (ESC=save&quit)\n");
   terminal_writestring("  write  [file] -- write text to a file\n");
   terminal_writestring("  see [file]    -- display file contents\n");
   terminal_writestring("  laf           -- list all files\n");
@@ -115,9 +260,22 @@ static void cmd_new(const char *arg) {
     terminal_writestring("Usage: new [filename]\n");
     return;
   }
-  if (fs_create(arg) == 0) {
-    terminal_printf("\nCreated: %s\n", arg);
+  char path[64];
+  resolve_path(arg, path);
+  if (fs_create(path) == 0) {
+    terminal_printf("\nCreated: %s\n", path);
   }
+}
+
+static void cmd_edit(const char *filename)
+{
+    if (!filename || *filename == '\0') {
+        terminal_writestring("Usage: edit [filename]\n");
+        return;
+    }
+    char path[64];
+    resolve_path(filename, path);
+    editor_open(path);
 }
 
 static void cmd_write(const char *arg) {
@@ -125,11 +283,13 @@ static void cmd_write(const char *arg) {
     terminal_writestring("Usage: write [filename]\n");
     return;
   }
+  char path[64];
+  resolve_path(arg, path);
   terminal_writestring("\nEnter text: ");
   keyboard_readline(text_buf, sizeof(text_buf));
-  int bytes = fs_write(arg, text_buf, strlen(text_buf));
+  int bytes = fs_write(path, text_buf, strlen(text_buf));
   if (bytes >= 0) {
-    terminal_printf("Written to %s (%d bytes)\n", arg, bytes);
+    terminal_printf("Written to %s (%d bytes)\n", path, bytes);
   }
 }
 
@@ -138,10 +298,12 @@ static void cmd_see(const char *arg) {
     terminal_writestring("Usage: see [filename]\n");
     return;
   }
+  char path[64];
+  resolve_path(arg, path);
   char read_buf[FS_MAX_FILESIZE + 1];
-  int n = fs_read(arg, read_buf, sizeof(read_buf));
+  int n = fs_read(path, read_buf, sizeof(read_buf));
   if (n < 0) {
-    terminal_printf("Error: file '%s' not found.\n", arg);
+    terminal_printf("Error: file '%s' not found.\n", path);
   } else {
     terminal_putchar('\n');
     terminal_writestring(read_buf);
@@ -151,7 +313,7 @@ static void cmd_see(const char *arg) {
 
 static void cmd_laf(void) {
   terminal_writestring("\n");
-  fs_list();
+  fs_list_dir(current_dir);
 }
 
 static void cmd_date(void) {
@@ -342,7 +504,7 @@ static void cmd_notes(const char *arg) {
     terminal_writestring("Saved.\n");
   } else if (strcmp(arg, "list") == 0) {
     terminal_writestring("Notes:\n");
-    fs_list();
+    fs_list_dir(current_dir);
   } else if (strncmp(arg, "view ", 5) == 0) {
     char filename[64];
     strcpy(filename, "note_");
@@ -376,7 +538,7 @@ static void cmd_fm(void) {
     terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
 
     terminal_writestring("  Files:\n");
-    fs_list();
+    fs_list_dir(current_dir);
 
     terminal_setcolor(COLOR_YELLOW, COLOR_BLACK);
     terminal_writestring("\n  [C]reate  [R]ead  [D]elete  [Q]uit\n  > ");
@@ -420,10 +582,12 @@ static void cmd_del(const char *arg) {
     terminal_writestring("Usage: del [filename]\n");
     return;
   }
-  if (fs_delete(arg) == 0) {
-    terminal_printf("Deleted: %s\n", arg);
+  char path[64];
+  resolve_path(arg, path);
+  if (fs_delete(path) == 0) {
+    terminal_printf("Deleted: %s\n", path);
   } else {
-    terminal_printf("Error: file '%s' not found.\n", arg);
+    terminal_printf("Error: file '%s' not found.\n", path);
   }
 }
 
@@ -453,14 +617,19 @@ static void cmd_cpy(const char *arg) {
     return;
   }
   char buf[FS_MAX_FILESIZE + 1];
-  int n = fs_read(src, buf, sizeof(buf));
+  
+  char path_src[64], path_dst[64];
+  resolve_path(src, path_src);
+  resolve_path(dst, path_dst);
+
+  int n = fs_read(path_src, buf, sizeof(buf));
   if (n < 0) {
-    terminal_printf("Error: source file '%s' not found.\n", src);
+    terminal_printf("Error: source file '%s' not found.\n", path_src);
     return;
   }
-  fs_create(dst);
-  fs_write(dst, buf, n);
-  terminal_printf("Copied: %s -> %s\n", src, dst);
+  if (fs_create(path_dst) < 0) return;
+  fs_write(path_dst, buf, n);
+  terminal_printf("Copied: %s -> %s\n", path_src, path_dst);
 }
 
 static void cmd_mov(const char *arg) {
@@ -489,15 +658,19 @@ static void cmd_mov(const char *arg) {
     return;
   }
   char buf[FS_MAX_FILESIZE + 1];
-  int n = fs_read(src, buf, sizeof(buf));
+  char path_src[64], path_dst[64];
+  resolve_path(src, path_src);
+  resolve_path(dst, path_dst);
+
+  int n = fs_read(path_src, buf, sizeof(buf));
   if (n < 0) {
-    terminal_printf("Error: source file '%s' not found.\n", src);
+    terminal_printf("Error: source file '%s' not found.\n", path_src);
     return;
   }
-  fs_create(dst);
-  fs_write(dst, buf, n);
-  fs_delete(src);
-  terminal_printf("Moved/Renamed: %s -> %s\n", src, dst);
+  if (fs_create(path_dst) < 0) return;
+  fs_write(path_dst, buf, n);
+  fs_delete(path_src);
+  terminal_printf("Moved/Renamed: %s -> %s\n", path_src, path_dst);
 }
 
 static void cmd_look(const char *arg) {
@@ -512,21 +685,69 @@ static void cmd_look(const char *arg) {
 }
 
 static void cmd_wdir(void) {
-  terminal_writestring("/root\n");
+  terminal_printf("%s\n", current_dir);
 }
 
 static void cmd_goto(const char *arg) {
-  terminal_printf("Moved to: /%s\n", arg ? arg : "root");
+  char new_dir[64];
+  if (!arg || *arg == '\0') {
+    strcpy(new_dir, "/root");
+  } else if (strcmp(arg, "..") == 0) {
+    strcpy(new_dir, current_dir);
+    if (strcmp(new_dir, "/") != 0 && strcmp(new_dir, "/root") != 0) {
+      char *last_slash = strrchr(new_dir, '/');
+      if (last_slash && last_slash != new_dir) {
+        *last_slash = '\0';
+      } else {
+        strcpy(new_dir, "/");
+      }
+    }
+  } else if (arg[0] == '/') {
+    strncpy(new_dir, arg, sizeof(new_dir) - 1);
+    new_dir[sizeof(new_dir) - 1] = '\0';
+  } else {
+    strcpy(new_dir, current_dir);
+    int len = strlen(new_dir);
+    if (new_dir[len - 1] != '/') {
+      strncat(new_dir, "/", sizeof(new_dir) - len - 1);
+    }
+    strncat(new_dir, arg, sizeof(new_dir) - strlen(new_dir) - 1);
+  }
+
+  if (!fs_is_dir(new_dir)) {
+    terminal_printf("Error: Directory '%s' does not exist.\n", new_dir);
+    return;
+  }
+  strcpy(current_dir, new_dir);
+  terminal_printf("Moved to: %s\n", current_dir);
 }
 
 static void cmd_mkd(const char *arg) {
-  if (arg && *arg) terminal_printf("Directory created: %s\n", arg);
-  else terminal_writestring("Usage: mkd [dir]\n");
+  if (!arg || *arg == '\0') {
+    terminal_writestring("Usage: mkd [dir]\n");
+    return;
+  }
+  char path[64];
+  resolve_path(arg, path);
+  if (fs_create_dir(path) == 0) {
+    terminal_printf("Directory created: %s\n", path);
+  } else {
+    terminal_printf("Error: could not create directory '%s'\n", path);
+  }
 }
 
 static void cmd_deld(const char *arg) {
-  if (arg && *arg) terminal_printf("Directory deleted: %s\n", arg);
-  else terminal_writestring("Usage: deld [dir]\n");
+  if (!arg || *arg == '\0') {
+    terminal_writestring("Usage: deld [dir]\n");
+    return;
+  }
+  char path[64];
+  resolve_path(arg, path);
+  if (fs_delete(path) == 0) {
+    terminal_printf("Directory deleted: %s\n", path);
+  } else {
+    terminal_printf("Error: directory '%s' not found.\n", path);
+  }
 }
 
 static void cmd_dtree(void) {
@@ -539,7 +760,11 @@ static void cmd_whoiam(void) {
 
 static void cmd_rst(void) {
   terminal_writestring("Restarting OS...\n");
-  outb(0x64, 0xFE);
+  struct {
+    uint16_t limit;
+    uint32_t base;
+  } __attribute__((packed)) idtr = {0, 0};
+  __asm__ volatile("lidt %0; int3" :: "m"(idtr));
 }
 
 static void cmd_bye(void) {
@@ -744,7 +969,7 @@ void shell_run(void) {
 
   while (1) {
     print_prompt();
-    keyboard_readline(input_buf, INPUT_MAX);
+    shell_readline(input_buf, INPUT_MAX);
 
     const char *line = skip_spaces(input_buf);
     if (*line == '\0')
@@ -786,6 +1011,7 @@ void shell_run(void) {
     else if (strcmp(cmd, "wrt") == 0) cmd_wrt(arg);
     else if (strcmp(cmd, "memo") == 0) cmd_memo();
     else if (strcmp(cmd, "new") == 0) cmd_new(arg);
+    else if (strcmp(cmd, "edit") == 0) cmd_edit(arg);
     else if (strcmp(cmd, "write") == 0) cmd_write(arg);
     else if (strcmp(cmd, "see") == 0) cmd_see(arg);
     else if (strcmp(cmd, "laf") == 0) cmd_laf();

@@ -36,6 +36,14 @@ QEMU     := $(shell command -v qemu-system-i386 2>/dev/null || \
                      command -v qemu-system-x86_64 2>/dev/null || \
                      echo qemu-system-i386)
 
+# Detect host OS to set appropriate QEMU display flags
+UNAME_S  := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    QEMU_DISPLAY := -display cocoa,zoom-to-fit=on
+else
+    QEMU_DISPLAY := 
+endif
+
 # --------------------------------------------------------------------------
 # Directories
 # --------------------------------------------------------------------------
@@ -154,7 +162,7 @@ run: iso
 	@echo "  [QEMU] Booting MiniOS..."
 	@$(QEMU) -cdrom $(ISO_DIR)/minios.iso -m 32M -serial stdio \
 	         -vga std \
-	         -display cocoa,zoom-to-fit=on
+	         $(QEMU_DISPLAY)
 
 # --------------------------------------------------------------------------
 # Debug: QEMU with GDB stub
@@ -166,7 +174,7 @@ debug: iso
 	@echo "         Then:         target remote :1234"
 	@$(QEMU) -cdrom $(ISO_DIR)/minios.iso -m 32M \
 	         -vga std \
-	         -display cocoa,zoom-to-fit=on \
+	         $(QEMU_DISPLAY) \
 	         -d int,cpu_reset \
 	         -s -S
 

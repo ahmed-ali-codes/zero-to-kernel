@@ -76,14 +76,23 @@ MiniOS/
 
 ## Quick Start
 
-### 1. Install the toolchain (macOS)
+### 1. Install the toolchain
 
+#### **macOS**
+Use the provided bootstrap script to set up the toolchain automatically:
 ```bash
 chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
-
 This installs: `i686-elf-gcc`, `nasm`, `qemu`, `xorriso`, `grub-mkrescue` via Homebrew.
+
+#### **Linux (Ubuntu/Debian)**
+Install the emulator, assembler, and filesystem tools:
+```bash
+sudo apt update
+sudo apt install -y build-essential nasm qemu-system-x86 xorriso grub-pc-bin grub-common
+```
+*Note: You will also need an `i686-elf-gcc` cross-compiler. You can build it from source or install prebuilt toolchains via packages like `gcc-monorepo` or package manager taps depending on your distribution.*
 
 ### 2. Build and run
 

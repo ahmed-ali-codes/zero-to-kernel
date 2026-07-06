@@ -117,7 +117,7 @@ void kernel_main(unsigned int magic, unsigned int mbi) {
     /* Boot complete */
     terminal_writestring("\n");
     terminal_setcolor(COLOR_YELLOW, COLOR_BLACK);
-    terminal_writestring(" Boot complete. Type 'help' for available commands.\n");
+    terminal_writestring(" Boot complete. Type 'cmds' for available commands.\n");
     terminal_setcolor(COLOR_WHITE, COLOR_BLACK);
 
     /* 11. Shell — enters infinite command loop, never returns */

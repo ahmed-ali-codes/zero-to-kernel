@@ -658,13 +658,13 @@ static void cmd_cpy(const char *arg) {
 static void cmd_mov(const char *arg) {
   char src[32], dst[32];
   if (!arg) {
-    terminal_writestring("Usage: mov [src] [dst]\n");
+    terminal_writestring("Usage: mov [src] [dst_dir]\n");
     return;
   }
   arg = skip_spaces(arg);
   const char *space = strchr(arg, ' ');
   if (!space) {
-    terminal_writestring("Usage: mov [src] [dst]\n");
+    terminal_writestring("Usage: mov [src] [dst_dir]\n");
     return;
   }
   size_t len1 = space - arg;
@@ -677,7 +677,65 @@ static void cmd_mov(const char *arg) {
   dst[sizeof(dst) - 1] = '\0';
   
   if (src[0] == '\0' || dst[0] == '\0') {
-    terminal_writestring("Usage: mov [src] [dst]\n");
+    terminal_writestring("Usage: mov [src] [dst_dir]\n");
+    return;
+  }
+  char buf[FS_MAX_FILESIZE + 1];
+  char path_src[64], path_dst[64];
+  resolve_path(src, path_src);
+  resolve_path(dst, path_dst);
+
+  if (fs_is_dir(path_dst)) {
+    const char *basename = strrchr(path_src, '/');
+    if (basename) {
+      basename++;
+    } else {
+      basename = path_src;
+    }
+    if (strcmp(path_dst, "/") != 0) {
+      strcat(path_dst, "/");
+    }
+    strncat(path_dst, basename, 63 - strlen(path_dst));
+    path_dst[63] = '\0';
+  } else {
+    terminal_printf("Error: Destination directory '%s' does not exist.\n", path_dst);
+    return;
+  }
+
+  int n = fs_read(path_src, buf, sizeof(buf));
+  if (n < 0) {
+    terminal_printf("Error: source file '%s' not found.\n", path_src);
+    return;
+  }
+  if (fs_create(path_dst) < 0) return;
+  fs_write(path_dst, buf, n);
+  fs_delete(path_src);
+  terminal_printf("Moved: %s -> %s\n", path_src, path_dst);
+}
+
+static void cmd_rename(const char *arg) {
+  char src[32], dst[32];
+  if (!arg) {
+    terminal_writestring("Usage: rename [src] [new_name]\n");
+    return;
+  }
+  arg = skip_spaces(arg);
+  const char *space = strchr(arg, ' ');
+  if (!space) {
+    terminal_writestring("Usage: rename [src] [new_name]\n");
+    return;
+  }
+  size_t len1 = space - arg;
+  if (len1 >= sizeof(src)) len1 = sizeof(src) - 1;
+  strncpy(src, arg, len1);
+  src[len1] = '\0';
+  
+  const char *arg2 = skip_spaces(space);
+  strncpy(dst, arg2, sizeof(dst) - 1);
+  dst[sizeof(dst) - 1] = '\0';
+  
+  if (src[0] == '\0' || dst[0] == '\0') {
+    terminal_writestring("Usage: rename [src] [new_name]\n");
     return;
   }
   char buf[FS_MAX_FILESIZE + 1];
@@ -693,17 +751,21 @@ static void cmd_mov(const char *arg) {
   if (fs_create(path_dst) < 0) return;
   fs_write(path_dst, buf, n);
   fs_delete(path_src);
-  terminal_printf("Moved/Renamed: %s -> %s\n", path_src, path_dst);
+  terminal_printf("Renamed: %s -> %s\n", path_src, path_dst);
 }
 
 static void cmd_look(const char *arg) {
-  terminal_writestring("Usage: look [name]\n");
-  terminal_writestring("MiniFS does not support directories, searching root...\n");
+  if (!arg || *arg == '\0') {
+    terminal_writestring("Usage: look [name]\n");
+    return;
+  }
+  char path[64];
+  resolve_path(arg, path);
   char buf[FS_MAX_FILESIZE + 1];
-  if (fs_read(arg, buf, sizeof(buf)) >= 0) {
-    terminal_printf("Found: /root/%s\n", arg);
+  if (fs_read(path, buf, sizeof(buf)) >= 0) {
+    terminal_printf("Found: %s\n", path);
   } else {
-    terminal_printf("Not found: %s\n", arg);
+    terminal_printf("Not found: %s\n", path);
   }
 }
 
@@ -1189,6 +1251,7 @@ void shell_run(void) {
     else if (strcmp(cmd, "del") == 0) cmd_del(arg);
     else if (strcmp(cmd, "cpy") == 0) cmd_cpy(arg);
     else if (strcmp(cmd, "mov") == 0) cmd_mov(arg);
+    else if (strcmp(cmd, "rename") == 0) cmd_rename(arg);
     else if (strcmp(cmd, "look") == 0) cmd_look(arg);
     else if (strcmp(cmd, "wdir") == 0) cmd_wdir();
     else if (strcmp(cmd, "goto") == 0) cmd_goto(arg);

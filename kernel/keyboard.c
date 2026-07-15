@@ -33,8 +33,8 @@ static const char scancode_map_lower[128] = {
     '\'','`',   0, '\\','z', 'x', 'c', 'v', 'b', 'n',  /* 0x28-0x31 */
     'm', ',', '.', '/',   0,  '*',   0,  ' ',   0,   0,  /* 0x32-0x3B */
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    /* 0x3C-0x45 */
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    /* 0x46-0x4F */
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    /* 0x50-0x59 */
+    0,  '7', '8', '9', '-', '4', '5', '6', '+', '1',    /* 0x46-0x4F */
+   '2', '3', '0', '.',   0,   0,   0,   0,   0,   0,    /* 0x50-0x59 */
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    /* 0x5A-0x63 */
     0,   0,   0,   0,   0,   0,   0,   0               /* 0x64-0x6B */
 };
@@ -47,8 +47,8 @@ static const char scancode_map_upper[128] = {
     '"', '~',   0,  '|','Z', 'X', 'C', 'V', 'B', 'N',
     'M', '<', '>', '?',   0,  '*',   0,  ' ',   0,   0,
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
-    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
+    0,  '7', '8', '9', '-', '4', '5', '6', '+', '1',
+   '2', '3', '0', '.',   0,   0,   0,   0,   0,   0,
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
     0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
@@ -64,6 +64,9 @@ static const char scancode_map_upper[128] = {
 /* Caps Lock */
 #define SCANCODE_CAPSLOCK     0x3A
 
+/* Num Lock */
+#define SCANCODE_NUMLOCK      0x45
+
 /* --------------------------------------------------------------------------
  * Ring buffer (256 bytes — power of 2 makes masking trivial)
  * -------------------------------------------------------------------------- */
@@ -77,6 +80,7 @@ static volatile int  kb_tail = 0;   /* read  index */
 /* Keyboard state */
 static int shift_held   = 0;
 static int capslock_on  = 0;
+static int numlock_on   = 0;
 
 /* --------------------------------------------------------------------------
  * IRQ1 handler — called by irq_handler in idt.c
@@ -108,14 +112,20 @@ static void keyboard_irq_handler(registers_t *regs) {
         capslock_on = !capslock_on;
         return;
     }
+    if (scancode == SCANCODE_NUMLOCK) {
+        numlock_on = !numlock_on;
+        return;
+    }
 
     /* Ignore key-release events (bit 7 set) */
     if (scancode & 0x80) return;
 
     char c = 0;
     
+    int is_numpad_nav = (!is_e0 && !numlock_on && scancode >= 0x47 && scancode <= 0x53 && scancode != 0x4A && scancode != 0x4E);
+
     /* Handle scrollback via extended keys */
-    if (is_e0) {
+    if (is_e0 || is_numpad_nav) {
         extern void terminal_scroll_up(int lines);
         extern void terminal_scroll_down(int lines);
         

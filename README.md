@@ -34,7 +34,7 @@ For in-depth explanations of the system design, APIs, code standards, and testin
 | GDT | Flat memory model — null, kernel code, kernel data |
 | IDT | 32 CPU exception handlers + 16 hardware IRQ gates |
 | PIC | 8259A remapped (IRQ 0-15 → vectors 32-47) |
-| Keyboard | IRQ1, PS/2 scancode set 1, US QWERTY, ring buffer, Shift/CapsLock |
+| Keyboard | IRQ1, PS/2 scancode set 1, US QWERTY, ring buffer, Shift/CapsLock, full Numpad support |
 | Mouse | IRQ12, PS/2 IntelliMouse scroll support, scroll-wheel terminal interaction |
 | Shell | 30+ interactive shell utilities (calculator, passgen, todo manager, notes) |
 | Memory | 256 KiB heap, block-list allocator, kmalloc/kfree with coalescing |
@@ -141,7 +141,13 @@ see [file]    — display file contents
 laf           — list all files
 del [file]    — permanently deletes a file
 cpy [src][dst]— copy a file
-mov [src][dst]— move / rename a file
+mov [src][dst]— move a file into a directory
+rename [s][n] — rename a file
+look [file]   — search for a file by name
+mkd [dir]     — create a new directory
+deld [dir]    — delete a directory
+goto [dir]    — change current directory
+wdir          — print working directory
 hunt[file][w] — search word inside file
 cnt [file]    — count words, lines, and bytes
 flip          — flip a coin

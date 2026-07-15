@@ -124,7 +124,7 @@ static void display_file_content(void)
  * -------------------------------------------------------------------------- */
 static int load_file_or_create(const char *filename)
 {
-    int bytes_read = fs_read(filename, edit_buffer, FS_MAX_FILESIZE);
+    int bytes_read = fs_read(filename, edit_buffer, FS_MAX_FILESIZE + 1);
 
     if (bytes_read >= 0) {
         /* Existing file — load it */
@@ -168,7 +168,7 @@ static void handle_backspace_key(void)
  * -------------------------------------------------------------------------- */
 static void handle_enter_key(void)
 {
-    if (edit_buffer_len < FS_MAX_FILESIZE - 1) {
+    if (edit_buffer_len < FS_MAX_FILESIZE) {
         edit_buffer[edit_buffer_len++] = '\n';
         edit_buffer[edit_buffer_len]   = '\0';
         terminal_putchar('\n');
@@ -185,7 +185,7 @@ static void handle_enter_key(void)
  * -------------------------------------------------------------------------- */
 static void handle_printable_char(char c)
 {
-    if (edit_buffer_len < FS_MAX_FILESIZE - 1) {
+    if (edit_buffer_len < FS_MAX_FILESIZE) {
         edit_buffer[edit_buffer_len++] = c;
         edit_buffer[edit_buffer_len]   = '\0';
         terminal_putchar(c);
@@ -250,7 +250,9 @@ static void run_editor_input_loop(const char *filename)
             continue;
         }
 
-        handle_printable_char(key);
+        if (key >= 32 && key < 127) {
+            handle_printable_char(key);
+        }
     }
 }
 
